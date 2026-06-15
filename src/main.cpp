@@ -15,7 +15,7 @@
 
 #define DOOR1_PIN 4
 #define DOOR2_PIN 7
-#define PULSE_MS 500
+#define PULSE_MS 1000
 
 #define CONFIG_FILE "/config.json"
 
