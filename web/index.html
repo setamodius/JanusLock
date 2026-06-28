@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#090d16" />
+  <title>Janus Remote</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: rgba(17, 24, 39, 0.55);
+      --card-hover: rgba(17, 24, 39, 0.7);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --blue: #3b82f6;
+      --blue2: #2563eb;
+      --purple: #8b5cf6;
+      --purple2: #7c3aed;
+      --green: #10b981;
+      --red: #f43f5e;
+      --amber: #f59e0b;
+      --shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Plus Jakarta Sans', Inter, system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Floating glowing background blobs */
+    body::before, body::after {
+      content: '';
+      position: absolute;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      filter: blur(120px);
+      z-index: -1;
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    body::before {
+      background: radial-gradient(circle, var(--blue) 0%, #1d4ed8 100%);
+      top: 10%;
+      left: 10%;
+      animation: float1 12s infinite alternate ease-in-out;
+    }
+
+    body::after {
+      background: radial-gradient(circle, var(--purple) 0%, #6d28d9 100%);
+      bottom: 10%;
+      right: 10%;
+      animation: float2 16s infinite alternate ease-in-out;
+    }
+
+    @keyframes float1 {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(60px, 40px) scale(1.15); }
+    }
+
+    @keyframes float2 {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(-50px, -60px) scale(1.08); }
+    }
+
+    .app {
+      width: min(440px, 100%);
+      min-height: 100vh;
+      padding: 32px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .header {
+      margin-bottom: 26px;
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      text-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+    }
+
+    h1 {
+      margin: 6px 0 0;
+      font-size: 46px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -.03em;
+      background: linear-gradient(to right, #f8fafc, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 22px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      transition: border-color 0.3s ease, background 0.3s ease;
+    }
+
+    .actions {
+      display: grid;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .door-button {
+      position: relative;
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 26px;
+      padding: 20px 22px;
+      min-height: 125px;
+      color: white;
+      cursor: pointer;
+      overflow: hidden;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.85), rgba(37, 99, 235, 0.85));
+      box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22);
+      transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .door-button.second {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.85), rgba(124, 58, 237, 0.85));
+      box-shadow: 0 12px 28px rgba(124, 58, 237, 0.22);
+    }
+
+    .door-button::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0));
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    .door-button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 36px rgba(37, 99, 235, 0.32);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .door-button:hover:not(:disabled)::before {
+      opacity: 1;
+    }
+
+    .door-button.second:hover:not(:disabled) {
+      box-shadow: 0 16px 36px rgba(124, 58, 237, 0.32);
+    }
+
+    .door-button:active:not(:disabled) {
+      transform: translateY(1px);
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.15);
+    }
+
+    .door-button:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+      filter: grayscale(.4);
+      box-shadow: none;
+      transform: none;
+    }
+
+    .door-button .label {
+      display: block;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      opacity: .65;
+    }
+
+    .door-button .title {
+      display: block;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -.02em;
+    }
+
+    .door-button .icon {
+      width: 32px;
+      height: 32px;
+      opacity: .45;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .door-button:hover:not(:disabled) .icon {
+      opacity: .85;
+      transform: scale(1.1);
+    }
+
+    .door-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+
+    .door-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    body.light .door-status {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .door-body {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      width: 100%;
+    }
+
+    .system-status-pills {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(17, 24, 39, 0.45);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    body.light .status-pill {
+      background: rgba(255, 255, 255, 0.45);
+      border-color: rgba(0, 0, 0, 0.04);
+    }
+
+    .status-pill .pill-label {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status-title {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .status-value {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #e2e8f0;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: all 0.3s ease;
+      flex: 0 0 auto;
+    }
+
+    .dot.online {
+      background: var(--green);
+      box-shadow: 0 0 12px var(--green);
+    }
+
+    .dot.offline {
+      background: var(--red);
+      box-shadow: 0 0 12px var(--red);
+    }
+
+    .dot.triggered {
+      background: var(--amber);
+      box-shadow: 0 0 12px var(--amber);
+    }
+
+    .settings-toggle {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 16px;
+      color: #e2e8f0;
+      background: rgba(30, 41, 59, 0.25);
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      margin-bottom: 16px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      transition: all 0.3s ease;
+    }
+
+    .settings-toggle:hover {
+      background: rgba(30, 41, 59, 0.45);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .settings-toggle:active {
+      transform: scale(.98);
+    }
+
+    .settings-panel {
+      max-height: 0;
+      opacity: 0;
+      overflow: hidden;
+      padding: 0 22px;
+      margin-bottom: 0;
+      border: 1px solid transparent;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .settings-panel.open {
+      max-height: 1000px;
+      opacity: 1;
+      padding: 22px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin: 0 0 8px 4px;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 16px;
+      background: rgba(10, 15, 28, 0.65);
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      outline: none;
+      margin-bottom: 18px;
+      transition: all 0.3s ease;
+    }
+
+    input:focus {
+      border-color: rgba(59, 130, 246, 0.6);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+      background: rgba(10, 15, 28, 0.8);
+    }
+
+    .save-button {
+      width: 100%;
+      border: 0;
+      border-radius: 18px;
+      padding: 16px;
+      color: white;
+      background: linear-gradient(135deg, var(--blue), var(--blue2));
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.2);
+      transition: all 0.3s ease;
+      margin-top: 4px;
+    }
+
+    .save-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 25px rgba(37, 99, 235, 0.35);
+    }
+
+    .save-button:active {
+      transform: translateY(1px);
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.6;
+      margin-top: 18px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 14px;
+      border-left: 3px solid var(--blue);
+    }
+
+    .footer {
+      color: rgba(148, 163, 184, 0.5);
+      text-align: center;
+      font-size: 12px;
+      margin-top: 20px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .door-button.pending .icon {
+      display: inline-block;
+      animation: spin 1s linear infinite;
+      opacity: 0.85;
+      transform-origin: center;
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: min(380px, 90%);
+      pointer-events: none;
+    }
+
+    .toast {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 16px 20px;
+      color: #e2e8f0;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      pointer-events: auto;
+    }
+
+    .toast.error {
+      border-color: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+    }
+
+    .toast.success {
+      border-color: rgba(34, 197, 94, 0.3);
+      background: rgba(34, 197, 94, 0.15);
+      color: #86efac;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeOut {
+      to {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+    }
+
+    /* Light Mode Overrides */
+    body.light {
+      --bg: #f1f5f9;
+      --card: rgba(255, 255, 255, 0.65);
+      --card-hover: rgba(255, 255, 255, 0.85);
+      --border: rgba(0, 0, 0, 0.08);
+      --text: #0f172a;
+      --muted: #64748b;
+      --shadow: 0 16px 36px rgba(0, 0, 0, 0.06);
+    }
+
+    body.light::before {
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, rgba(29, 78, 216, 0.05) 100%);
+    }
+
+    body.light::after {
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(109, 40, 217, 0.05) 100%);
+    }
+
+    body.light h1 {
+      background: linear-gradient(to right, #0f172a, #475569);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    body.light .status-card {
+      background: rgba(255, 255, 255, 0.45);
+      border-color: rgba(0, 0, 0, 0.03);
+    }
+
+    body.light .status-card:hover {
+      background: rgba(255, 255, 255, 0.65);
+      border-color: rgba(0, 0, 0, 0.06);
+    }
+
+    body.light .status-value {
+      color: #0f172a;
+    }
+
+    body.light .theme-toggle {
+      background: rgba(255, 255, 255, 0.65);
+      border-color: rgba(0, 0, 0, 0.08);
+      color: #0f172a;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+
+    body.light .theme-toggle:hover {
+      background: rgba(255, 255, 255, 0.85);
+      border-color: rgba(0, 0, 0, 0.12);
+    }
+
+    body.light .settings-toggle {
+      background: rgba(255, 255, 255, 0.45);
+      border-color: rgba(0, 0, 0, 0.08);
+      color: #0f172a;
+    }
+
+    body.light .settings-toggle:hover {
+      background: rgba(255, 255, 255, 0.65);
+    }
+
+    body.light input {
+      background: rgba(255, 255, 255, 0.7);
+      color: #0f172a;
+      border-color: rgba(0, 0, 0, 0.08);
+    }
+
+    body.light input:focus {
+      background: rgba(255, 255, 255, 0.9);
+      border-color: rgba(59, 130, 246, 0.5);
+    }
+
+    body.light .hint {
+      background: rgba(0, 0, 0, 0.02);
+    }
+
+    body.light .toast {
+      background: rgba(255, 255, 255, 0.95);
+      border-color: rgba(0, 0, 0, 0.08);
+      color: #0f172a;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    body.light .mqtt-console {
+      background: rgba(255, 255, 255, 0.8);
+      border-color: rgba(0, 0, 0, 0.08);
+      color: #047857;
+    }
+
+    /* Theme Toggle Button */
+    .theme-toggle {
+      background: rgba(30, 41, 59, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #e2e8f0;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .theme-toggle:hover {
+      background: rgba(30, 41, 59, 0.45);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .theme-toggle:active {
+      transform: scale(0.95);
+    }
+
+    /* MQTT Live Console */
+    .mqtt-console {
+      background: rgba(10, 15, 28, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 16px;
+      padding: 12px 14px;
+      height: 130px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      color: #10b981;
+      overflow-y: auto;
+      margin-bottom: 18px;
+      white-space: pre-wrap;
+      text-align: left;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="app">
+    <header class="header" style="position: relative; text-align: center; display: flex; flex-direction: column; align-items: center;">
+      <button id="themeToggle" class="theme-toggle" style="position: absolute; right: 0; top: 0;" onclick="toggleTheme()"></button>
+      <div class="eyebrow">Access Control</div>
+      <h1>Janus</h1>
+      <div class="subtitle" style="font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 5px; opacity: 0.75;">
+        powered by KR
+      </div>
+      <div class="system-status-pills" style="justify-content: center; width: 100%;">
+        <div class="status-pill">
+          <span id="brokerDot" class="dot offline"></span>
+          <span class="pill-label">Broker:</span> <span id="brokerState">offline</span>
+        </div>
+        <div class="status-pill">
+          <span id="deviceDot" class="dot"></span>
+          <span class="pill-label">Device:</span> <span id="deviceState">unknown</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="actions">
+      <button id="door1Button" class="door-button" onclick="openDoor(1)">
+        <div class="door-header">
+          <span class="label">Door 1</span>
+          <span class="door-status">
+            <span id="door1Dot" class="dot"></span>
+            <span id="door1State">unavailable</span>
+          </span>
+        </div>
+        <div class="door-body">
+          <span class="title">Open Gate</span>
+          <span class="icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 10h18M3 14h18M3 18h18M5 6v14M9 6v14M13 6v14M17 6v14M21 6v14"/>
+            </svg>
+          </span>
+        </div>
+      </button>
+
+      <button id="door2Button" class="door-button second" onclick="openDoor(2)">
+        <div class="door-header">
+          <span class="label">Door 2</span>
+          <span class="door-status">
+            <span id="door2Dot" class="dot"></span>
+            <span id="door2State">unavailable</span>
+          </span>
+        </div>
+        <div class="door-body">
+          <span class="title">Open Garage</span>
+          <span class="icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 22V10l9-7 9 7v12M6 22V13h12v9M9 16h6M9 19h6"/>
+            </svg>
+          </span>
+        </div>
+      </button>
+    </section>
+
+    <button class="settings-toggle" onclick="toggleSettings()">Settings</button>
+
+    <section id="settingsPanel" class="panel settings-panel">
+      <label>MQTT WebSocket URL</label>
+      <input id="brokerUrl" placeholder="ws://192.168.1.10:8083/mqtt" />
+
+      <label>MQTT User</label>
+      <input id="mqttUser" placeholder="Optional" />
+
+      <label>MQTT Password</label>
+      <input id="mqttPass" type="password" placeholder="Optional" />
+
+      <label>Topic Prefix</label>
+      <input id="topicPrefix" placeholder="keremhome" />
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label>Door 1 Name</label>
+          <input id="door1Name" placeholder="Open Gate" />
+        </div>
+        <div>
+          <label>Door 2 Name</label>
+          <input id="door2Name" placeholder="Open Garage" />
+        </div>
+      </div>
+
+      <label>MQTT Live Console</label>
+      <div id="mqttConsole" class="mqtt-console"></div>
+
+      <button class="save-button" onclick="saveSettings()">Save & Connect</button>
+
+      <div class="hint">
+        Topics are generated automatically:<br />
+        prefix/device/status<br />
+        prefix/door1/command<br />
+        prefix/door2/command
+      </div>
+    </section>
+
+    <div class="footer">Janus Remote</div>
+  </main>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script>
+    let client = null;
+    const doorStates = {
+      1: "unavailable",
+      2: "unavailable"
+    };
+    const pendingCommands = {
+      1: false,
+      2: false
+    };
+
+    let doorNames = {
+      1: "Open Gate",
+      2: "Open Garage"
+    };
+
+    const doorSVGs = {
+      1: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18M3 14h18M3 18h18M5 6v14M9 6v14M13 6v14M17 6v14M21 6v14"/></svg>`,
+      2: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V10l9-7 9 7v12M6 22V13h12v9M9 16h6M9 19h6"/></svg>`
+    };
+    const spinnerSVG = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
+
+    const els = {
+      door1Button: document.getElementById("door1Button"),
+      door2Button: document.getElementById("door2Button"),
+
+      brokerUrl: document.getElementById("brokerUrl"),
+      mqttUser: document.getElementById("mqttUser"),
+      mqttPass: document.getElementById("mqttPass"),
+      topicPrefix: document.getElementById("topicPrefix"),
+      door1Name: document.getElementById("door1Name"),
+      door2Name: document.getElementById("door2Name"),
+
+      brokerDot: document.getElementById("brokerDot"),
+      brokerState: document.getElementById("brokerState"),
+
+      deviceDot: document.getElementById("deviceDot"),
+      deviceState: document.getElementById("deviceState"),
+
+      door1Dot: document.getElementById("door1Dot"),
+      door1State: document.getElementById("door1State"),
+
+      door2Dot: document.getElementById("door2Dot"),
+      door2State: document.getElementById("door2State")
+    };
+
+    function cleanPrefix(value) {
+      return value.trim().replace(/^\/+|\/+$/g, "");
+    }
+
+    function topic(path) {
+      const prefix = cleanPrefix(els.topicPrefix.value || "keremhome");
+      return `${prefix}/${path}`;
+    }
+
+    function normalizeState(state) {
+      return String(state || "unknown").toLowerCase();
+    }
+
+    function setVisual(dot, text, state) {
+      const normalized = normalizeState(state);
+
+      dot.className = "dot";
+      text.textContent = normalized;
+
+      if (normalized === "online" || normalized === "ready") {
+        dot.classList.add("online");
+      } else if (normalized === "offline" || normalized === "unavailable") {
+        dot.classList.add("offline");
+      } else if (normalized === "triggered") {
+        dot.classList.add("triggered");
+      }
+    }
+
+    function triggerHaptic(pattern) {
+      if (navigator.vibrate) {
+        try {
+          navigator.vibrate(pattern);
+        } catch (e) {
+          console.warn("Haptic feedback error:", e);
+        }
+      }
+    }
+
+    function logMqtt(msg, type = "info") {
+      const consoleEl = document.getElementById("mqttConsole");
+      if (!consoleEl) return;
+      const time = new Date().toLocaleTimeString();
+      let color = "#10b981"; // success green
+      if (type === "error") color = "#f43f5e"; // error red
+      if (type === "send") color = "#3b82f6"; // send blue
+      if (type === "info") color = "#94a3b8"; // muted gray
+
+      consoleEl.innerHTML += `<div style="color: ${color}">[${time}] ${msg}</div>`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    function showToast(message, type = "info") {
+      const container = document.getElementById("toastContainer");
+      if (!container) return;
+
+      const toast = document.createElement("div");
+      toast.className = `toast ${type}`;
+
+      let icon = "ℹ️";
+      if (type === "error") {
+        icon = "❌";
+        triggerHaptic([100, 50, 100]);
+      }
+      if (type === "success") {
+        icon = "✅";
+      }
+
+      toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.animation = "fadeOut 0.3s forwards";
+        toast.addEventListener("animationend", () => {
+          toast.remove();
+        });
+      }, 3000);
+    }
+
+    function updateDoorDisplays() {
+      const brokerOnline = normalizeState(els.brokerState.textContent) === "online";
+      const deviceOnline = normalizeState(els.deviceState.textContent) === "online";
+      const isAvailable = brokerOnline && deviceOnline;
+
+      setVisual(els.door1Dot, els.door1State, isAvailable ? doorStates[1] : "unavailable");
+      setVisual(els.door2Dot, els.door2State, isAvailable ? doorStates[2] : "unavailable");
+    }
+
+    function updateButtonState() {
+      const brokerOnline = normalizeState(els.brokerState.textContent) === "online";
+      const deviceOnline = normalizeState(els.deviceState.textContent) === "online";
+      const isOnline = brokerOnline && deviceOnline;
+
+      [1, 2].forEach(doorNo => {
+        const btn = els[`door${doorNo}Button`];
+        const titleEl = btn.querySelector(".title");
+        const iconEl = btn.querySelector(".icon");
+        const isPending = pendingCommands[doorNo];
+
+        if (isPending) {
+          btn.disabled = true;
+          titleEl.textContent = "Opening...";
+          iconEl.innerHTML = spinnerSVG;
+          btn.classList.add("pending");
+        } else {
+          btn.disabled = !isOnline;
+          titleEl.textContent = doorNames[doorNo];
+          iconEl.innerHTML = doorSVGs[doorNo];
+          btn.classList.remove("pending");
+        }
+      });
+    }
+
+    function setBrokerState(online) {
+      setVisual(els.brokerDot, els.brokerState, online ? "online" : "offline");
+
+      if (!online) {
+        setDeviceState("unknown");
+      }
+
+      updateDoorDisplays();
+      updateButtonState();
+    }
+
+    function setDeviceState(state) {
+      setVisual(els.deviceDot, els.deviceState, state);
+      updateDoorDisplays();
+      updateButtonState();
+    }
+
+    function setDoorState(doorNo, state) {
+      const prevState = doorStates[doorNo];
+      doorStates[doorNo] = state;
+      updateDoorDisplays();
+      updateButtonState();
+
+      // Trigger a haptic feedback double-pulse when status changes to triggered/ready/open
+      if (prevState !== state && state !== "unavailable") {
+        triggerHaptic([40, 40, 40]);
+      }
+    }
+
+    function toggleSettings() {
+      const panel = document.getElementById("settingsPanel");
+      panel.classList.toggle("open");
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle("light");
+      const isLight = document.body.classList.contains("light");
+      localStorage.setItem("janus.theme", isLight ? "light" : "dark");
+      updateThemeToggleIcon();
+      triggerHaptic(20);
+    }
+
+    function updateThemeToggleIcon() {
+      const isLight = document.body.classList.contains("light");
+      const btn = document.getElementById("themeToggle");
+      if (!btn) return;
+      if (isLight) {
+        btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+      } else {
+        btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+      }
+    }
+
+    function initTheme() {
+      const theme = localStorage.getItem("janus.theme") || "dark";
+      if (theme === "light") {
+        document.body.classList.add("light");
+      }
+      updateThemeToggleIcon();
+    }
+
+    function loadSettings() {
+      els.brokerUrl.value = localStorage.getItem("janus.brokerUrl") || "";
+      els.mqttUser.value = localStorage.getItem("janus.mqttUser") || "";
+      els.mqttPass.value = localStorage.getItem("janus.mqttPass") || "";
+      els.topicPrefix.value = localStorage.getItem("janus.topicPrefix") || "keremhome";
+      els.door1Name.value = localStorage.getItem("janus.door1Name") || "Open Gate";
+      els.door2Name.value = localStorage.getItem("janus.door2Name") || "Open Garage";
+
+      doorNames[1] = els.door1Name.value;
+      doorNames[2] = els.door2Name.value;
+
+      const hasBroker = !!els.brokerUrl.value;
+      const panel = document.getElementById("settingsPanel");
+      if (hasBroker) {
+        panel.classList.remove("open");
+      } else {
+        panel.classList.add("open");
+      }
+    }
+
+    function saveSettings() {
+      localStorage.setItem("janus.brokerUrl", els.brokerUrl.value.trim());
+      localStorage.setItem("janus.mqttUser", els.mqttUser.value.trim());
+      localStorage.setItem("janus.mqttPass", els.mqttPass.value);
+      localStorage.setItem("janus.topicPrefix", cleanPrefix(els.topicPrefix.value));
+      localStorage.setItem("janus.door1Name", els.door1Name.value.trim() || "Open Gate");
+      localStorage.setItem("janus.door2Name", els.door2Name.value.trim() || "Open Garage");
+
+      doorNames[1] = els.door1Name.value.trim() || "Open Gate";
+      doorNames[2] = els.door2Name.value.trim() || "Open Garage";
+
+      logMqtt("Ayarlar yerel olarak kaydedildi.", "info");
+      updateButtonState();
+      connectMqtt();
+      document.getElementById("settingsPanel").classList.remove("open");
+    }
+
+    function connectMqtt() {
+      const url = els.brokerUrl.value.trim();
+
+      if (!url) {
+        showToast("MQTT WebSocket URL is required.", "error");
+        logMqtt("Bağlantı hatası: URL eksik.", "error");
+        return;
+      }
+
+      if (client) {
+        try { 
+          logMqtt("Mevcut MQTT bağlantısı kapatılıyor...", "info");
+          client.end(true); 
+        } catch {}
+      }
+
+      setBrokerState(false);
+      logMqtt(`MQTT Broker'a bağlanılıyor: ${url}`, "info");
+
+      const options = {
+        clientId: "janus-web-" + Math.random().toString(16).slice(2),
+        clean: true,
+        reconnectPeriod: 2000,
+        connectTimeout: 5000
+      };
+
+      if (els.mqttUser.value.trim()) {
+        options.username = els.mqttUser.value.trim();
+        options.password = els.mqttPass.value;
+      }
+
+      client = mqtt.connect(url, options);
+
+      client.on("connect", () => {
+        setBrokerState(true);
+        showToast("Connected to MQTT broker", "success");
+        logMqtt("MQTT bağlantısı başarılı.", "success");
+
+        const devStatus = topic("device/status");
+        const d1Status = topic("door1/status");
+        const d2Status = topic("door2/status");
+
+        client.subscribe(devStatus);
+        client.subscribe(d1Status);
+        client.subscribe(d2Status);
+
+        logMqtt(`Konulara abone olundu:\n- ${devStatus}\n- ${d1Status}\n- ${d2Status}`, "info");
+      });
+
+      client.on("reconnect", () => {
+        setBrokerState(false);
+        logMqtt("Bağlantı koptu, yeniden bağlanılıyor...", "error");
+      });
+
+      client.on("close", () => {
+        setBrokerState(false);
+        logMqtt("Bağlantı kapatıldı.", "info");
+      });
+
+      client.on("error", (err) => {
+        console.error(err);
+        setBrokerState(false);
+        showToast("MQTT Connection Error: " + (err.message || "Unknown error"), "error");
+        logMqtt(`MQTT Hatası: ${err.message || "Bilinmeyen hata"}`, "error");
+      });
+
+      client.on("message", (receivedTopic, payload) => {
+        const msg = payload.toString();
+        logMqtt(`Mesaj alındı -> ${receivedTopic}: ${msg}`, "info");
+
+        if (receivedTopic === topic("device/status")) {
+          setDeviceState(msg);
+        }
+
+        if (receivedTopic === topic("door1/status")) {
+          pendingCommands[1] = false;
+          setDoorState(1, msg);
+        }
+
+        if (receivedTopic === topic("door2/status")) {
+          pendingCommands[2] = false;
+          setDoorState(2, msg);
+        }
+      });
+    }
+
+    function openDoor(doorNo) {
+      const brokerOnline = normalizeState(els.brokerState.textContent) === "online";
+      const deviceOnline = normalizeState(els.deviceState.textContent) === "online";
+
+      triggerHaptic(30);
+
+      if (!brokerOnline || !deviceOnline || !client || !client.connected) {
+        showToast("Janus is not connected.", "error");
+        logMqtt("Komut gönderilemedi: Bağlantı yok.", "error");
+        return;
+      }
+
+      pendingCommands[doorNo] = true;
+      updateButtonState();
+
+      const cmdTopic = topic(`door${doorNo}/command`);
+      logMqtt(`Komut gönderiliyor -> ${cmdTopic}: open`, "send");
+
+      client.publish(cmdTopic, "open", {
+        qos: 0,
+        retain: false
+      }, (err) => {
+        if (err) {
+          console.error(err);
+          showToast(`Failed to send command to Door ${doorNo}`, "error");
+          logMqtt(`Hata: Komut gönderilemedi (${err.message})`, "error");
+          pendingCommands[doorNo] = false;
+          updateButtonState();
+        }
+      });
+
+      // Safety timeout to reset button if no status response is received
+      setTimeout(() => {
+        if (pendingCommands[doorNo]) {
+          pendingCommands[doorNo] = false;
+          updateButtonState();
+          logMqtt(`Zaman aşımı: Door ${doorNo} durum güncellemesi gelmedi.`, "error");
+        }
+      }, 5000);
+    }
+
+    initTheme();
+    loadSettings();
+    updateButtonState();
+
+    if (els.brokerUrl.value) {
+      connectMqtt();
+    }
+  </script>
+</body>
+</html>

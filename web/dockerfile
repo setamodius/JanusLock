@@ -1,0 +1,12 @@
+FROM node:22-alpine
+
+LABEL org.opencontainers.image.title="Janus Remote"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.description="MQTT-based door control with REST API"
+
+WORKDIR /app
+COPY package.json ./
+RUN npm install --omit=dev
+COPY index.html server.js ./
+EXPOSE 3000
+CMD ["node", "server.js"]

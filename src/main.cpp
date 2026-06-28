@@ -288,7 +288,7 @@ void connectMqtt()
         if (strlen(config.mqttUser) > 0)
         {
             ok = mqtt.connect(
-                "janus-garage-c3",
+                "janus-garage-ctug",
                 config.mqttUser,
                 config.mqttPass,
                 deviceStatusTopic,
@@ -300,7 +300,7 @@ void connectMqtt()
         else
         {
             ok = mqtt.connect(
-                "janus-garage-c3",
+                "janus-garage-ctug",
                 deviceStatusTopic,
                 1,
                 true,
@@ -391,6 +391,9 @@ void setupWifiAndConfig()
     wm.addParameter(&p_mqttPass);
     wm.addParameter(&p_topicPrefix);
 
+    wm.setConnectTimeout(60);
+    wm.setConfigPortalTimeout(120);
+
     wm.setAPCallback([](WiFiManager* wm)
     {
         show3("Connect WiFi:", "Janus-Setup", "192.168.4.1");
@@ -464,6 +467,16 @@ void loop()
     {
         mqttOk = false;
         show3("WiFi lost", "Reconnecting", "");
+
+        static unsigned long wifiLostAt = 0;
+        if (wifiLostAt == 0)
+            wifiLostAt = millis();
+
+        if (millis() - wifiLostAt > 30000)
+        {
+            wifiLostAt = 0;
+            ESP.restart();
+        }
     }
 
     delay(10);
