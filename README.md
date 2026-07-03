@@ -21,6 +21,7 @@ Janus Lock does **not** attempt to clone, decode, or bypass the RF protocol. Ins
 | Microcontroller | ESP32-C3 DevKitM-1 |
 | Display | SSD1306 72×40 OLED (I2C) |
 | Relay | CPC1017N Solid State Relay |
+| Relay driver | PC817 4-channel optocoupler isolation module |
 | Boost Converter | XL6009 |
 | Remote | Original Garage Remote |
 | Power | USB-C Power Supply |
@@ -35,6 +36,10 @@ Janus Lock does **not** attempt to clone, decode, or bypass the RF protocol. Ins
 | Door 2 relay | 7 |
 | LED | 8 |
 | Reset button | 9 |
+
+**Important — optocoupler module wiring:**
+
+The PC817 isolation module ships with a jumper bridging `VCC` and `JD-VCC`. Leaving it in place puts relay-coil switching current on the same rail as the ESP32, which causes WiFi/MQTT instability (drops, failed AP broadcast) under load. Remove the jumper and power `JD-VCC` from a separate 5V source, sharing only GND with the ESP32.
 
 ## Architecture
 
@@ -78,6 +83,8 @@ All topics are prefixed with the configured `topicPrefix` (default: `keremhome`)
 | `{prefix}/door1/command` | → Firmware | `open` / `press` / `trigger` / `1` |
 | `{prefix}/door2/command` | → Firmware | `open` / `press` / `trigger` / `1` |
 
+The MQTT client ID is derived from the device's MAC address (`janus-<MAC>`), so multiple Janus devices can share the same broker without client ID collisions.
+
 ## Firmware
 
 Built with [PlatformIO](https://platformio.org/).
@@ -105,7 +112,7 @@ Configuration parameters:
 * MQTT Host, Port, Username, Password
 * Topic Prefix
 
-**Factory reset:** Hold the BOOT button for 5 seconds.
+**Factory reset:** Hold the BOOT button for 5 seconds. This works both during normal operation and while the WiFi connect / `Janus-Setup` AP portal screen is showing.
 
 ## Web UI
 

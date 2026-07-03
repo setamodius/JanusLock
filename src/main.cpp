@@ -51,6 +51,15 @@ char door1StatusTopic[96];
 char door2CommandTopic[96];
 char door2StatusTopic[96];
 
+char mqttClientId[32];
+
+void buildClientId()
+{
+    String mac = WiFi.macAddress();
+    mac.replace(":", "");
+    snprintf(mqttClientId, sizeof(mqttClientId), "janus-%s", mac.c_str());
+}
+
 void buildTopics()
 {
     snprintf(deviceStatusTopic, sizeof(deviceStatusTopic), "%s/device/status", config.topicPrefix);
@@ -288,7 +297,7 @@ void connectMqtt()
         if (strlen(config.mqttUser) > 0)
         {
             ok = mqtt.connect(
-                "janus-garage-ctug",
+                mqttClientId,
                 config.mqttUser,
                 config.mqttPass,
                 deviceStatusTopic,
@@ -300,7 +309,7 @@ void connectMqtt()
         else
         {
             ok = mqtt.connect(
-                "janus-garage-ctug",
+                mqttClientId,
                 deviceStatusTopic,
                 1,
                 true,
@@ -401,7 +410,17 @@ void setupWifiAndConfig()
 
     show3("WiFi", "Connecting...", "");
 
+    wm.setConfigPortalBlocking(false);
+
     bool connected = wm.autoConnect("Janus-Setup");
+
+    while (!connected && wm.getConfigPortalActive())
+    {
+        wm.process();
+        checkResetButton();
+        connected = (WiFi.status() == WL_CONNECTED);
+        delay(10);
+    }
 
     if (!connected)
     {
@@ -444,6 +463,10 @@ void setup()
     LittleFS.begin(true);
 
     setupWifiAndConfig();
+
+    buildClientId();
+    Serial.print("MQTT client ID: ");
+    Serial.println(mqttClientId);
 
     connectMqtt();
 }
